@@ -19,7 +19,32 @@ class Logic
         optimization = (*config)("Bot", "Optimization");
     }
 
-    vector<move_pos> find_best_turns(const bool color);
+    // Главная функция поиска лучшей последовательности ходов для бота
+    // Использует алгоритм минимакс для определения оптимальной стратегии
+    // Параметр color: цвет бота (false = белые, true = черные)
+    // Возвращает вектор ходов, которые следует выполнить (обычно серия взятий)
+    vector<move_pos> find_best_turns(const bool color)
+    {
+        // Очищаем структуры данных для отслеживания лучших ходов
+        next_best_state.clear();  // Массив ссылок на следующие состояния
+        next_move.clear();        // Массив лучших ходов для каждого состояния
+        
+        // Запускаем поиск лучшего первого хода с текущего состояния доски
+        // Начинаем с состояния 0, без предыдущих ходов (-1, -1)
+        find_first_best_turn(board->get_board(), color, -1, -1, 0);
+        
+        // Восстанавливаем последовательность лучших ходов по цепочке состояний
+        int cur_state = 0;           // Начинаем с начального состояния
+        vector<move_pos> result;     // Результирующая последовательность ходов
+        
+        // Проходим по цепочке лучших состояний до конца
+        do {
+            result.push_back(next_move[cur_state]);      // Добавляем ход из текущего состояния
+            cur_state = next_best_state[cur_state];      // Переходим к следующему состоянию
+        } while (cur_state != -1 && next_move[cur_state].x != -1);  // Пока не дойдем до конца цепочки
+        
+        return result;
+    }
 
 private:
     // Выполняет ход на копии доски и возвращает новое состояние
@@ -81,9 +106,142 @@ private:
         return (b + bq * q_coef) / (w + wq * q_coef);
     }
 
-    double find_first_best_turn(vector<vector<POS_T>> mtx, const bool color, const POS_T x, const POS_T y, size_t state, double alpha = -1);
+    // Специальная функция для обработки серий взятий (множественных ходов одной фигуры)
+    // В шашках, если фигура может продолжить бить после первого взятия, она обязана это сделать
+    // Параметры:
+    //   mtx: текущее состояние доски
+    //   color: цвет играющей стороны
+    //   x, y: координаты фигуры (-1,-1 для первого хода)
+    //   state: индекс текущего состояния в массивах next_move/next_best_state
+    //   alpha: альфа-значение для отсечения (по умолчанию -1)
+    double find_first_best_turn(vector<vector<POS_T>> mtx, const bool color, const POS_T x, const POS_T y, size_t state, double alpha = -1)
+    {
+        // Добавляем новое состояние в структуры отслеживания
+        next_best_state.push_back(-1);           // Изначально нет следующего состояния
+        next_move.emplace_back(-1, -1, -1, -1);  // Изначально нет хода
+        
+        double best_score = -1;  // Лучший найденный счет (для максимизирующего игрока)
+        
+        // Если это не первый ход в серии, ищем продолжение взятий с конкретной позиции
+        if (state != 0) {
+            find_turns(x, y, mtx);
+        }
+        
+        // Сохраняем текущие найденные ходы
+        auto turns_now = turns;
+        bool have_beats_now = have_beats;
+        
+        // Если нет взятий и это не первый ход в серии, передаем ход противнику
+        if (!have_beats_now && state != 0) {
+            return find_best_turns_rec(mtx, 1 - color, 0, alpha);
+        }
+        
+        // Перебираем все возможные ходы
+        for (auto turn : turns_now) {
+            size_t next_state = next_move.size();  // Индекс следующего состояния
+            double score;
+            
+            if (have_beats_now) {
+                // Если есть взятия, рекурсивно ищем продолжение серии взятий
+                score = find_first_best_turn(make_turn(mtx, turn), color, turn.x2, turn.y2, next_state, best_score);
+            } else {
+                // Если нет взятий, переходим к обычному алгоритму минимакс
+                score = find_best_turns_rec(make_turn(mtx, turn), 1 - color, 0, best_score);
+            }
+            
+            // Обновляем лучший ход, если найден лучший счет
+            if (score > best_score) {
+                best_score = score;
+                // Сохраняем ссылку на следующее состояние (если есть продолжение взятий)
+                next_best_state[state] = (have_beats_now ? int(next_state) : -1);
+                next_move[state] = turn;  // Сохраняем лучший ход
+            }
+        }
+        
+        return best_score;
+    }
 
-    double find_best_turns_rec(vector<vector<POS_T>> mtx, const bool color, const size_t depth, double alpha = -1, double beta = INF + 1, const POS_T x = -1, const POS_T y = -1);
+    // Основной рекурсивный алгоритм минимакс с альфа-бета отсечением
+    // Реализует игровое дерево для поиска оптимального хода на заданную глубину
+    // Параметры:
+    //   mtx: текущее состояние доски
+    //   color: цвет текущего игрока (0=белые, 1=черные)
+    //   depth: текущая глубина поиска
+    //   alpha: лучший счет для максимизирующего игрока (альфа-отсечение)
+    //   beta: лучший счет для минимизирующего игрока (бета-отсечение)
+    //   x, y: координаты конкретной фигуры для продолжения серии взятий (-1,-1 для обычного хода)
+    double find_best_turns_rec(vector<vector<POS_T>> mtx, const bool color, const size_t depth, double alpha = -1, double beta = INF + 1, const POS_T x = -1, const POS_T y = -1)
+    {
+        // Условие остановки рекурсии: достигнута максимальная глубина поиска
+        if (depth == Max_depth) {
+            // Возвращаем оценку позиции: четные глубины - для начального игрока, нечетные - для противника
+            return calc_score(mtx, (depth % 2 == color));
+        }
+        
+        // Определяем возможные ходы
+        if (x != -1) {
+            // Если заданы конкретные координаты, ищем продолжение серии взятий
+            find_turns(x, y, mtx);
+        } else {
+            // Иначе ищем все возможные ходы для данного цвета
+            find_turns(color, mtx);
+        }
+        
+        // Сохраняем результаты поиска ходов
+        auto turns_now = turns;
+        bool have_beats_now = have_beats;
+        
+        // Если нет взятий и мы продолжаем серию взятий, передаем ход противнику
+        if (!have_beats_now && x != -1) {
+            return find_best_turns_rec(mtx, 1 - color, depth + 1, alpha, beta);
+        }
+        
+        // Если нет доступных ходов, игра окончена
+        if (turns_now.empty()) {
+            // Четные глубины - поражение текущего игрока, нечетные - победа
+            return (depth % 2 ? 0 : INF);
+        }
+        
+        // Инициализация значений для минимакс алгоритма
+        double min_score = INF + 1;  // Лучший счет для минимизирующего игрока
+        double max_score = -1;       // Лучший счет для максимизирующего игрока
+        
+        // Перебираем все возможные ходы
+        for (auto turn : turns_now) {
+            double score = 0.0;
+            
+            if (!have_beats_now && x == -1) {
+                // Обычный ход - передаем ход противнику с увеличением глубины
+                score = find_best_turns_rec(make_turn(mtx, turn), 1 - color, depth + 1, alpha, beta);
+            } else {
+                // Продолжение серии взятий - остается тот же игрок, глубина не увеличивается
+                score = find_best_turns_rec(make_turn(mtx, turn), color, depth, alpha, beta, turn.x2, turn.y2);
+            }
+            
+            // Обновляем минимальные и максимальные значения
+            min_score = min(min_score, score);
+            max_score = max(max_score, score);
+            
+            // Альфа-бета отсечение для оптимизации
+            if (depth % 2) {
+                // На нечетных глубинах максимизируем
+                alpha = max(alpha, max_score);
+            } else {
+                // На четных глубинах минимизируем
+                beta = min(beta, min_score);
+            }
+            
+            // Отсечение: если alpha >= beta, дальнейший поиск бессмысленен
+            if (optimization != "O0" && alpha >= beta) {
+                // Возвращаем чуть лучший/худший счет для корректности отсечения
+                return (depth % 2 ? max_score + 1 : min_score - 1);
+            }
+        }
+        
+        // Возвращаем результат в зависимости от четности глубины
+        // Четные глубины - минимизируем, нечетные - максимизируем
+        return (depth % 2 ? max_score : min_score);
+    }
 
 public:
     // Перегруженная функция поиска ходов для определенного цвета на текущей доске
