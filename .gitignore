@@ -1,11 +1,52 @@
+# Visual Studio файлы
 *.sln
 *.vcxproj
 *.filters
 *.config
 *.user
-log.txt
 .vs
 x64
 packages
 Debug
 Release
+
+# CMake сборка
+build/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Исполняемые файлы
+*.exe
+*.out
+*.app
+Checkers
+
+# Объектные файлы
+*.o
+*.obj
+
+# Библиотеки
+*.lib
+*.a
+*.dll
+*.so
+*.dylib
+
+# Временные и лог файлы
+log.txt
+*.tmp
+*.temp
+
+# IDE файлы
+.vscode/
+*.suo
+*.userosscache
+
+# Системные файлы
+.DS_Store
+Thumbs.db
+
+# vcpkg
+vcpkg_installed/

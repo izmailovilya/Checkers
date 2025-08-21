@@ -16,22 +16,29 @@
 
 using namespace std;
 
+// Класс для отображения и управления игровой доской шашек
 class Board
 {
 public:
-    Board() = default;
+    Board() = default;  // Конструктор по умолчанию
+    
+    // Конструктор с заданными размерами окна
     Board(const unsigned int W, const unsigned int H) : W(W), H(H)
     {
     }
 
-    // draws start board
+    // Инициализирует SDL, создает окно и отрисовывает начальную доску
+    // Возвращает 0 при успехе, 1 при ошибке
     int start_draw()
     {
+        // Инициализация SDL
         if (SDL_Init(SDL_INIT_EVERYTHING) != 0)
         {
             print_exception("SDL_Init can't init SDL2 lib");
             return 1;
         }
+        
+        // Автоматическое определение размеров окна, если не заданы
         if (W == 0 || H == 0)
         {
             SDL_DisplayMode dm;
@@ -40,37 +47,48 @@ public:
                 print_exception("SDL_GetDesktopDisplayMode can't get desctop display mode");
                 return 1;
             }
+            // Создаем квадратное окно размером с меньшую сторону экрана
             W = min(dm.w, dm.h);
-            W -= W / 15;
+            W -= W / 15;  // Небольшой отступ от края экрана
             H = W;
         }
+        
+        // Создание окна
         win = SDL_CreateWindow("Checkers", 0, H / 30, W, H, SDL_WINDOW_RESIZABLE);
         if (win == nullptr)
         {
             print_exception("SDL_CreateWindow can't create window");
             return 1;
         }
+        
+        // Создание рендерера с аппаратным ускорением и вертикальной синхронизацией
         ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
         if (ren == nullptr)
         {
             print_exception("SDL_CreateRenderer can't create renderer");
             return 1;
         }
-        board = IMG_LoadTexture(ren, board_path.c_str());
-        w_piece = IMG_LoadTexture(ren, piece_white_path.c_str());
-        b_piece = IMG_LoadTexture(ren, piece_black_path.c_str());
-        w_queen = IMG_LoadTexture(ren, queen_white_path.c_str());
-        b_queen = IMG_LoadTexture(ren, queen_black_path.c_str());
-        back = IMG_LoadTexture(ren, back_path.c_str());
-        replay = IMG_LoadTexture(ren, replay_path.c_str());
+        
+        // Загрузка всех текстур игры
+        board = IMG_LoadTexture(ren, board_path.c_str());      // Текстура доски
+        w_piece = IMG_LoadTexture(ren, piece_white_path.c_str()); // Белые шашки
+        b_piece = IMG_LoadTexture(ren, piece_black_path.c_str()); // Черные шашки
+        w_queen = IMG_LoadTexture(ren, queen_white_path.c_str()); // Белые дамки
+        b_queen = IMG_LoadTexture(ren, queen_black_path.c_str()); // Черные дамки
+        back = IMG_LoadTexture(ren, back_path.c_str());         // Кнопка "Назад"
+        replay = IMG_LoadTexture(ren, replay_path.c_str());     // Кнопка "Повтор"
+        
+        // Проверка успешной загрузки всех текстур
         if (!board || !w_piece || !b_piece || !w_queen || !b_queen || !back || !replay)
         {
             print_exception("IMG_LoadTexture can't load main textures from " + textures_path);
             return 1;
         }
+        
+        // Получение реальных размеров окна и инициализация игрового поля
         SDL_GetRendererOutputSize(ren, &W, &H);
-        make_start_mtx();
-        rerender();
+        make_start_mtx();  // Создание начальной расстановки фигур
+        rerender();        // Первая отрисовка
         return 0;
     }
 

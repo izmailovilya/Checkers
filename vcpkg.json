@@ -1,0 +1,9 @@
+{
+  "name": "checkers",
+  "version": "1.0.0",
+  "dependencies": [
+    "sdl2",
+    "sdl2-image",
+    "nlohmann-json"
+  ]
+}
